@@ -46,6 +46,8 @@ func OrderCallbackHandle(ctx context.Context, t *asynq.Task) error {
 		ActualAmount:       order.ActualAmount,
 		Token:              order.Token,
 		BlockTransactionId: order.BlockTransactionId,
+		NotifyUrl:          order.NotifyUrl,
+		RedirectUrl:        order.RedirectUrl,
 		Status:             mdb.StatusPaySuccess,
 	}
 	signature, err := sign.Get(orderResp, config.GetApiAuthToken())

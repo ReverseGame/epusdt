@@ -138,14 +138,14 @@ func Trc20CallBack(token string, wg *sync.WaitGroup) {
 		mq.MClient.Enqueue(orderCallbackQueue, asynq.MaxRetry(5))
 		// 发送机器人消息
 		msgTpl := `
-<b>📢📢有新的交易支付成功！</b>
-<pre>交易号：%s</pre>
-<pre>订单号：%s</pre>
-<pre>请求支付金额：%f cny</pre>
-<pre>实际支付金额：%f usdt</pre>
-<pre>钱包地址：%s</pre>
-<pre>订单创建时间：%s</pre>
-<pre>支付成功时间：%s</pre>
+<b>📢📢New transaction payment successful!</b>
+<pre>Transaction ID: %s</pre>
+<pre>Order ID: %s</pre>
+<pre>Requested payment amount: %f cny</pre>
+<pre>Actual payment amount: %f usdt</pre>
+<pre>Wallet address: %s</pre>
+<pre>Order creation time: %s</pre>
+<pre>Payment success time: %s</pre>
 `
 		msg := fmt.Sprintf(msgTpl, order.TradeId, order.OrderId, order.Amount, order.ActualAmount, order.Token, order.CreatedAt.ToDateTimeString(), carbon.Now().ToDateTimeString())
 		telegram.SendToBot(msg)

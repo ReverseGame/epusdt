@@ -19,6 +19,8 @@ type OrderNotifyResponse struct {
 	ActualAmount       float64 `json:"actual_amount"`        //  订单实际需要支付的金额，保留4位小数
 	Token              string  `json:"token"`                //  收款钱包地址
 	BlockTransactionId string  `json:"block_transaction_id"` // 区块id
+	NotifyUrl          string  `json:"notify_url"`           //  异步回调地址
+	RedirectUrl        string  `json:"redirect_url"`         //  同步回调地址
 	Signature          string  `json:"signature"`            // 签名
 	Status             int     `json:"status"`               //  1：等待支付，2：支付成功，3：已过期
 }

@@ -15,7 +15,7 @@ func GetCheckoutCounterByTradeId(tradeId string) (*response.CheckoutCounterRespo
 		return nil, err
 	}
 	if orderInfo.ID <= 0 || orderInfo.Status != mdb.StatusWaitPay {
-		return nil, errors.New("不存在待支付订单或已过期！")
+		return nil, errors.New("Order does not exist or has expired!")
 	}
 	resp := &response.CheckoutCounterResponse{
 		TradeId:        orderInfo.TradeId,
