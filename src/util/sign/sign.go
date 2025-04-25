@@ -48,7 +48,7 @@ func MapToParams(params map[string]interface{}) (string, error) {
 	var tempArr []string
 	temString := ""
 	for k, v := range params {
-		if k == "signature" {
+		if k != "amount" && k != "notify_url" && k != "order_id" && k != "redirect_url" {
 			continue
 		}
 		if v == nil {
