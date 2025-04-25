@@ -18,6 +18,7 @@ var (
 	TgProxy     string
 	TgManage    int64
 	UsdtRate    float64
+	Profile     string
 )
 
 func Init() {
@@ -52,6 +53,7 @@ func Init() {
 	TgBotToken = viper.GetString("tg_bot_token")
 	TgProxy = viper.GetString("tg_proxy")
 	TgManage = viper.GetInt64("tg_manage")
+	Profile = viper.GetString("profile")
 }
 
 func GetAppVersion() string {
@@ -96,4 +98,8 @@ func GetOrderExpirationTime() int {
 func GetOrderExpirationTimeDuration() time.Duration {
 	timer := GetOrderExpirationTime()
 	return time.Minute * time.Duration(timer)
+}
+
+func GetProfile() string {
+	return Profile
 }

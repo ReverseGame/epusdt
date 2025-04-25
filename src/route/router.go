@@ -18,6 +18,8 @@ func RegisterRoute(e *echo.Echo) {
 	payRoute.GET("/checkout-counter/:trade_id", comm.Ctrl.CheckoutCounter)
 	// 状态检测
 	payRoute.GET("/check-status/:trade_id", comm.Ctrl.CheckStatus)
+	// 完成支付（仅beta环境可用）
+	payRoute.POST("/complete-payment/:trade_id", comm.Ctrl.CompletePayment)
 
 	apiV1Route := e.Group("/api/v1")
 	// ====订单相关====
