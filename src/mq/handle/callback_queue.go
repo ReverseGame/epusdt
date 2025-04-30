@@ -49,6 +49,7 @@ func OrderCallbackHandle(ctx context.Context, t *asynq.Task) error {
 		NotifyUrl:          order.NotifyUrl,
 		RedirectUrl:        order.RedirectUrl,
 		Status:             mdb.StatusPaySuccess,
+		Metadata:           order.Metadata,
 	}
 	signature, err := sign.Get(orderResp, config.GetApiAuthToken())
 	if err != nil {

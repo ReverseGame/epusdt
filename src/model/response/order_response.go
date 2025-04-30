@@ -9,6 +9,7 @@ type CreateTransactionResponse struct {
 	Token          string  `json:"token"`           //  收款钱包地址
 	ExpirationTime int64   `json:"expiration_time"` // 过期时间 时间戳
 	PaymentUrl     string  `json:"payment_url"`     // 收银台地址
+	Metadata       string  `json:"metadata"`        // 元数据
 }
 
 // OrderNotifyResponse 订单异步回调结构体
@@ -23,4 +24,5 @@ type OrderNotifyResponse struct {
 	RedirectUrl        string  `json:"redirect_url"`         //  同步回调地址
 	Signature          string  `json:"signature"`            // 签名
 	Status             int     `json:"status"`               //  1：等待支付，2：支付成功，3：已过期
+	Metadata           string  `json:"metadata"`             // 元数据
 }

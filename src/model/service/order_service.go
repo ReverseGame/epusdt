@@ -80,6 +80,7 @@ func CreateTransaction(req *request.CreateTransactionRequest) (*response.CreateT
 		Status:       mdb.StatusWaitPay,
 		NotifyUrl:    req.NotifyUrl,
 		RedirectUrl:  req.RedirectUrl,
+		Metadata:     req.Metadata,
 	}
 	err = data.CreateOrderWithTransaction(tx, order)
 	if err != nil {
@@ -105,6 +106,7 @@ func CreateTransaction(req *request.CreateTransactionRequest) (*response.CreateT
 		Token:          order.Token,
 		ExpirationTime: ExpirationTime,
 		PaymentUrl:     fmt.Sprintf("%s/pay/checkout-counter/%s", config.GetAppUri(), order.TradeId),
+		Metadata:       order.Metadata,
 	}
 	return resp, nil
 }
