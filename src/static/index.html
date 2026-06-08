@@ -6,6 +6,7 @@
   <meta http-equiv="X-UA-Compatible" content="IE=edge">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>USDT PAY</title>
+  <link rel="icon" type="image/png" href="/static/favicon.png">
   <link rel="stylesheet" href="/static/reset.css">
   <style>
     .main {
@@ -168,10 +169,10 @@
   </div>
 </body>
 </html>
-<script src="https://cdn.bootcdn.net/ajax/libs/jquery/3.6.0/jquery.min.js"></script>
-<script src="https://cdn.bootcdn.net/ajax/libs/jquery.qrcode/1.0/jquery.qrcode.min.js"></script>
-<script src="https://cdn.bootcdn.net/ajax/libs/clipboard.js/2.0.10/clipboard.min.js"></script>
-<script src="https://cdn.bootcdn.net/ajax/libs/layer/3.5.1/layer.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/jquery@3.6.0/dist/jquery.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/qrcodejs2@0.0.2/qrcode.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/clipboard@2.0.10/dist/clipboard.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/layer-src@3.5.1/src/layer.min.js"></script>
 <script>
   // 支付时间倒计时
   function clock() {
@@ -193,13 +194,13 @@
   }
   setTimeout(clock, 1000);
 
-  $('.qr-code').qrcode({
+  new QRCode(document.querySelector('.qr-code'), {
     text: "{{.Token}}",
     width: 200,
     height: 200,
-    foreground: "#000000",
-    background: "#ffffff",
-    typeNumber: -1
+    colorDark: "#000000",
+    colorLight: "#ffffff",
+    correctLevel: QRCode.CorrectLevel.H
   });
 
   // 金额复制
