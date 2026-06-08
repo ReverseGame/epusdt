@@ -1,0 +1,61 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  namespace: ipoasis-product
+  name: epusdt
+  labels:
+    app: epusdt
+spec:
+  minReadySeconds: 10
+  replicas: 1
+  strategy:
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 1
+    type: RollingUpdate
+  selector:
+    matchLabels:
+      app: epusdt
+  template:
+    metadata:
+      labels:
+        app: epusdt
+    spec:
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                  - key: app
+                    operator: In
+                    values:
+                      - ipoasis
+      containers:
+        - name: epusdt
+          image: registry.us-east-1.aliyuncs.com/reversegame/epusdt:latest
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 8000
+          volumeMounts:
+          - mountPath: /app/.env
+            name: epusdt-config
+            subPath: .env
+      volumes:
+        - name: epusdt-config
+          secret:
+            secretName: epusdt-config
+      imagePullSecrets:
+        - name: regcred-aliyun
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: epusdt
+  namespace: ipoasis-product
+spec:
+  selector: #指定标签选择器选择的标签范围.
+    app: epusdt
+  ports:
+    - name: epusdt
+      port: 8000          #设定Serivce对外提供服务的端口.
+      targetPort: 8000 #设定容器(Pod)的端口,即Pod网络的端口。
