@@ -1,4 +1,9 @@
 .idea/
 src/runtime/
 src/.env
+src/.env-*
 .DS_Store
+
+# 编译产物
+src/epusdt
+src/*.exe
