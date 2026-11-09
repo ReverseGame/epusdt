@@ -12,6 +12,7 @@ import (
     "math/big"
     "net/http"
     "net/url"
+    "runtime/debug"
     "strconv"
     "strings"
     "time"
@@ -26,6 +27,7 @@ import (
 
 const usdtContract = "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t"
 const transferTopic = "ddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef"
+const INCOME_MAX_ATTEMPTS = 8
 
 var incomeAuditRunning = make(chan struct{}, 1)
 
@@ -39,8 +41,8 @@ func StartIncomeAudit() {
         go func() {
             defer func() {
                 <-incomeAuditRunning
-                if recover() != nil {
-                    log.Sugar.Error("收入核对异常退出，下一轮继续原游标")
+                if cause := recover(); cause != nil {
+                    log.Sugar.Errorf("收入核对异常退出，下一轮继续原游标: %v\n%s", cause, debug.Stack())
                 }
             }()
             AuditTrc20Income()
@@ -141,7 +143,8 @@ func scanIncomeWallet(wallet string, initial int64) error {
         if err := incomeJSON(http.MethodGet, UsdtTrc20ApiUri+"?"+query.Encode(), nil, &page, "TRON-PRO-API-KEY", viper.GetString("income_audit_tronscan_key")); err != nil {
             return err
         }
-        if page.Code != 200 || page.Data == nil || page.PageSize != len(page.Data) {
+        // 以实际数组长度分页，兼容空结果及上游page_size口径差异。
+        if page.Code != 200 || len(page.Data) > 50 {
             return errors.New("转账分页响应无效")
         }
         for _, transfer := range page.Data {
@@ -301,54 +304,119 @@ func incomeJSON(method, endpoint string, body []byte, target interface{}, header
     return json.NewDecoder(io.LimitReader(response.Body, 4*1024*1024)).Decode(target)
 }
 
-// reconcileIncome 先排除历史已付款交易再通知；数据库查询失败保持待核对，不冒充未匹配。
-func reconcileIncome() error {
-    var events []incomeEvent
-    if err := dao.Mdb.Raw("SELECT * FROM incoming_transfer_event WHERE state='PENDING' AND next_attempt_at<=NOW(3) ORDER BY id LIMIT 50").Scan(&events).Error; err != nil {
-        return err
-    }
+// incomePaidOrder 以十进制文本读取已付款金额，避免经过float64转换。
+type incomePaidOrder struct {
+    Token        string
+    ActualAmount string
+}
+
+// classifyIncome 输入同交易同钱包完整事件与已付款记录，返回待处理事件及目标状态。
+func classifyIncome(events []incomeEvent, orders []incomePaidOrder) ([]incomeEvent, error) {
+    counts := make(map[string]int)
     for _, event := range events {
-        var orders []mdb.Orders
-        if err := dao.Mdb.Where("block_transaction_id=? AND status=?", event.TxHash, mdb.StatusPaySuccess).Find(&orders).Error; err != nil {
-            return err
+        amount, err := decimal.NewFromString(event.Amount)
+        if err != nil {
+            return nil, err
         }
-        var sameAmount int64
-        if err := dao.Mdb.Raw("SELECT COUNT(*) FROM incoming_transfer_event WHERE tx_hash=? AND wallet=? AND amount=?",
-            event.TxHash, event.Wallet, event.Amount).Scan(&sameAmount).Error; err != nil {
-            return err
-        }
-        matched := false
-        for _, order := range orders {
-            amount, err := decimal.NewFromString(event.Amount)
-            if err != nil {
-                return err
-            }
-            if order.Token == event.Wallet && amount.Equal(decimal.NewFromFloat(order.ActualAmount)) && sameAmount == 1 {
-                matched = true
-            }
-        }
-        if matched {
-            if err := dao.Mdb.Exec("UPDATE incoming_transfer_event SET state='MATCHED' WHERE id=?", event.ID).Error; err != nil {
-                return err
-            }
+        counts[amount.String()]++
+    }
+    pending := make([]incomeEvent, 0)
+    for _, event := range events {
+        if event.State != "PENDING" {
             continue
         }
+        amount, _ := decimal.NewFromString(event.Amount)
+        matches := 0
+        for _, order := range orders {
+            paid, err := decimal.NewFromString(order.ActualAmount)
+            if err != nil {
+                return nil, err
+            }
+            if order.Token == event.Wallet && paid.Equal(amount) {
+                matches++
+            }
+        }
+        event.State = "NOTIFIED"
         event.Reason = "链上已到账，未找到对应已付款订单，请业务核对；系统未自动入账"
         if len(orders) > 0 {
             event.Reason = "同交易已有付款记录，但到账事件与订单无法唯一对应，请业务核对，禁止重复入账"
         }
-        if err := notifyIncome(event); err != nil {
-            delay := 30 * (1 << uint(minIncome(event.Attempts, 6)))
-            if err = dao.Mdb.Exec("UPDATE incoming_transfer_event SET attempts=attempts+1,next_attempt_at=DATE_ADD(NOW(3),INTERVAL ? SECOND) WHERE id=? AND state='PENDING'", delay, event.ID).Error; err != nil {
-                return err
-            }
-            continue
+        if matches == 1 && counts[amount.String()] == 1 {
+            event.State = "MATCHED"
+            event.Reason = "到账事件与已付款订单唯一匹配"
         }
-        if err := dao.Mdb.Exec("UPDATE incoming_transfer_event SET state='NOTIFIED',reason=? WHERE id=?", event.Reason, event.ID).Error; err != nil {
+        pending = append(pending, event)
+    }
+    return pending, nil
+}
+
+// reconcileIncome 按交易与钱包读取完整分组；全部通知受理后才原子更新该组状态。
+func reconcileIncome() error {
+    var groups []struct {
+        TxHash string
+        Wallet string
+    }
+    // LIMIT限制分组数，不能把同一交易的事件截成半批；整组等待最长退避时间。
+    if err := dao.Mdb.Raw("SELECT tx_hash,wallet FROM incoming_transfer_event WHERE state='PENDING' GROUP BY tx_hash,wallet HAVING MAX(next_attempt_at)<=NOW(3) ORDER BY MIN(id) LIMIT 50").Scan(&groups).Error; err != nil {
+        return err
+    }
+    for _, group := range groups {
+        var events []incomeEvent
+        if err := dao.Mdb.Raw("SELECT * FROM incoming_transfer_event WHERE tx_hash=? AND wallet=? ORDER BY event_index", group.TxHash, group.Wallet).Scan(&events).Error; err != nil {
+            return err
+        }
+        var orders []incomePaidOrder
+        if err := dao.Mdb.Model(&mdb.Orders{}).Select("token,CAST(actual_amount AS CHAR) AS actual_amount").Where("block_transaction_id=? AND status=?", group.TxHash, mdb.StatusPaySuccess).Scan(&orders).Error; err != nil {
+            return err
+        }
+        pending, err := classifyIncome(events, orders)
+        if err != nil {
+            return err
+        }
+        if err = deliverIncomeGroup(pending, notifyIncome); err != nil {
             return err
         }
     }
     return nil
+}
+
+// deliverIncomeGroup 输入分类后的完整待处理分组和发送函数；失败统一退避，成功一次提交。
+func deliverIncomeGroup(events []incomeEvent, send func(incomeEvent) error) error {
+    attempts := 0
+    ids := make([]uint64, 0, len(events))
+    for _, event := range events {
+        ids = append(ids, event.ID)
+        if event.Attempts > attempts {
+            attempts = event.Attempts
+        }
+    }
+    for _, event := range events {
+        if event.State == "MATCHED" {
+            continue
+        }
+        if err := send(event); err != nil {
+            state := "PENDING"
+            attempts++
+            if attempts >= INCOME_MAX_ATTEMPTS {
+                state = "FAILED"
+            }
+            delay := 30 * (1 << uint(minIncome(attempts-1, 6)))
+            reason := []rune(event.Reason + "；最后投递错误：" + err.Error())
+            if len(reason) > 512 {
+                reason = reason[:512]
+            }
+            // 接收端按eventKey去重；前序已受理事件随整组重试，避免本地部分NOTIFIED。
+            return dao.Mdb.Exec("UPDATE incoming_transfer_event SET state=?,attempts=?,reason=?,next_attempt_at=DATE_ADD(NOW(3),INTERVAL ? SECOND) WHERE id IN ? AND state='PENDING'", state, attempts, string(reason), delay, ids).Error
+        }
+    }
+    return dao.Mdb.Transaction(func(tx *gorm.DB) error {
+        for _, event := range events {
+            if err := tx.Exec("UPDATE incoming_transfer_event SET state=?,reason=? WHERE id=? AND state='PENDING'", event.State, event.Reason, event.ID).Error; err != nil {
+                return err
+            }
+        }
+        return nil
+    })
 }
 
 // notifyIncome 以HMAC签名投递核心服务，只有持久化成功响应才标记已通知。
