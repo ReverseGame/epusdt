@@ -15,6 +15,8 @@ var gListenTrc20JobLock sync.Mutex
 func (r ListenTrc20Job) Run() {
 	gListenTrc20JobLock.Lock()
 	defer gListenTrc20JobLock.Unlock()
+	// 正常支付监听结束后独立核对收入；即使没有可用收款钱包，也处理白名单钱包的历史到账。
+	defer service.StartIncomeAudit()
 	walletAddress, err := data.GetAvailableWalletAddress()
 	if err != nil {
 		log.Sugar.Error(err)
