@@ -1,0 +1,34 @@
+name: epusdt beta image
+on:
+  push:
+    branches: [beta]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: epusdt-beta-image
+  cancel-in-progress: false
+jobs:
+  build:
+    if: github.ref == 'refs/heads/beta'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.23'
+          cache-dependency-path: src/go.sum
+      - name: Test
+        working-directory: src
+        run: go test ./...
+      - uses: docker/login-action@v3
+        with:
+          registry: ${{ secrets.ALIYUN_CN_URL }}
+          username: ${{ secrets.ALIYUN_CN_USERNAME }}
+          password: ${{ secrets.ALIYUN_CN_PASSWORD }}
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: ${{ secrets.ALIYUN_CN_URL }}/reversegamelocal/epusdt:beta-${{ github.sha }}
+          labels: org.opencontainers.image.revision=${{ github.sha }}
