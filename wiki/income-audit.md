@@ -1,5 +1,13 @@
 # USDT-TRC 独立收入核对
 
+## 2026-11-10 测试发布记录
+
+测试环境已从旧 `latest` 更新为 `beta-7a5d007`，镜像摘要 `sha256:110252cb0898b71311de4ceb9db39c4b9f335d15dd9abb25eddbc1e2a3b98a8b`，运行副本 Ready 1/1。两张核对表已存在，Go 全量测试通过。
+
+仓库缺少镜像注册表 Secrets，本次使用 beta 集群的既有 `regcred` 和 Kaniko 构建同一提交，再明确以 `kubectl --context beta -n oasis-beta set image deployment/epusdt ...` 更新。后续 CI 即使缺少推送凭据也会执行测试、构建并保存镜像 artifact，明确提示“未上传/未部署”，不能把 CI 成功当作部署成功。获得对应仓库 Secrets 后才自动推送镜像。
+
+当前实例唯一真实收款钱包由 IPOasis、THU、Resilab 共用，尚未启用真实钱包核对扫描，避免归属不明的入账直接按 IPOasis 业务路由。接收端测试仅放行独立模拟钱包，模拟TRC事件重复三次只入队一次，错误签名403，飞书已成功发送且带业务@。SOL-USDT由solana-pay独立核对，不由本服务扫描。真实扫描开启前需按下文配置及确认共享钱包告警路由。
+
 核对任务默认关闭，不创建付款记录，也不更改客户订单支付状态。每次支付监听触发时，在支付锁外启动独立 goroutine；进程内最多一个核对任务。
 
 ## 启用配置
