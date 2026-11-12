@@ -12,7 +12,10 @@ type ListenTrc20Job struct {
 
 var gListenTrc20JobLock sync.Mutex
 
+// Run 无入参，启动独立收入核对并执行本轮支付监听，无返回值。
 func (r ListenTrc20Job) Run() {
+	// 核对任务内部异步并发上限为1；启动在支付锁外，钱包查询失败仍会执行。
+	service.StartIncomeAudit()
 	gListenTrc20JobLock.Lock()
 	defer gListenTrc20JobLock.Unlock()
 	walletAddress, err := data.GetAvailableWalletAddress()

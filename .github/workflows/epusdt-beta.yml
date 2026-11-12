@@ -1,0 +1,48 @@
+name: epusdt beta image
+on:
+  push:
+    branches: [beta]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: epusdt-beta-image
+  cancel-in-progress: false
+jobs:
+  build:
+    if: github.ref == 'refs/heads/beta'
+    runs-on: ubuntu-latest
+    env:
+      IMAGE: registry.cn-hangzhou.aliyuncs.com/reversegamelocal/epusdt:beta-${{ github.sha }}
+      CAN_PUSH: ${{ secrets.ALIYUN_CN_URL != '' && secrets.ALIYUN_CN_USERNAME != '' && secrets.ALIYUN_CN_PASSWORD != '' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.23'
+          cache-dependency-path: src/go.sum
+      - name: Test
+        working-directory: src
+        run: go test ./...
+      - uses: docker/login-action@v3
+        if: env.CAN_PUSH == 'true'
+        with:
+          registry: ${{ secrets.ALIYUN_CN_URL }}
+          username: ${{ secrets.ALIYUN_CN_USERNAME }}
+          password: ${{ secrets.ALIYUN_CN_PASSWORD }}
+      - name: Build revision image
+        run: docker build --label "org.opencontainers.image.revision=${GITHUB_SHA}" -t "$IMAGE" .
+      - name: Publish image
+        if: env.CAN_PUSH == 'true'
+        run: docker push "$IMAGE"
+      - name: Preserve image when registry secrets are unavailable
+        if: env.CAN_PUSH != 'true'
+        run: |
+          echo '::warning::Registry credentials are unavailable. Image is built but NOT published or deployed; download the artifact or use the documented beta cluster build.'
+          docker save "$IMAGE" -o epusdt-image.tar
+      - uses: actions/upload-artifact@v4
+        if: env.CAN_PUSH != 'true'
+        with:
+          name: epusdt-beta-${{ github.sha }}
+          path: epusdt-image.tar
+          retention-days: 7
